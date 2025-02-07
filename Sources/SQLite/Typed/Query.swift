@@ -741,11 +741,11 @@ extension QueryType {
             "".wrap(insert.columns) as Expression<Void>,
             Expression<Void>(literal: "VALUES"),
             "".wrap(insert.values) as Expression<Void>,
-            whereClause,
             Expression<Void>(literal: "ON CONFLICT"),
             "".wrap(conflicting) as Expression<Void>,
             Expression<Void>(literal: "DO UPDATE SET"),
-            ", ".join(setValues.map { $0.expression })
+            ", ".join(setValues.map { $0.expression }),
+            whereClause,
         ]
 
         return Insert(" ".join(clauses.compactMap { $0 }).expression)
