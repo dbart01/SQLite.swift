@@ -94,7 +94,7 @@ public final class Connection {
     /// - Parameters:
     ///
     ///   - location: The location of the database. Creates a new database if it
-    ///     doesn’t already exist (unless in read-only mode).
+    ///     doesn't already exist (unless in read-only mode).
     ///
     ///     Default: `.inMemory`.
     ///
@@ -102,14 +102,20 @@ public final class Connection {
     ///
     ///     Default: `false`.
     ///
+    ///   - queue: The dispatch queue to execute database operations on.
+    ///     If nil, a new serial queue will be created.
+    ///
+    ///     Default: `nil`.
+    ///
     /// - Returns: A new database connection.
-    public init(_ location: Location = .inMemory, readonly: Bool = false) throws {
+    public init(_ location: Location = .inMemory, readonly: Bool = false, queue: DispatchQueue? = nil) throws {
+        self.queue = queue ?? DispatchQueue(label: "SQLite.Database", attributes: [])
         let flags = readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE)
         try check(sqlite3_open_v2(location.description,
                                   &_handle,
                                   flags | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI,
                                   nil))
-        queue.setSpecific(key: Connection.queueKey, value: queueContext)
+        self.queue.setSpecific(key: Connection.queueKey, value: queueContext)
     }
 
     /// Initializes a new connection to a database.
@@ -117,17 +123,22 @@ public final class Connection {
     /// - Parameters:
     ///
     ///   - filename: The location of the database. Creates a new database if
-    ///     it doesn’t already exist (unless in read-only mode).
+    ///     it doesn't already exist (unless in read-only mode).
     ///
     ///   - readonly: Whether or not to open the database in a read-only state.
     ///
     ///     Default: `false`.
     ///
+    ///   - queue: The dispatch queue to execute database operations on.
+    ///     If nil, a new serial queue will be created.
+    ///
+    ///     Default: `nil`.
+    ///
     /// - Throws: `Result.Error` iff a connection cannot be established.
     ///
     /// - Returns: A new database connection.
-    public convenience init(_ filename: String, readonly: Bool = false) throws {
-        try self.init(.uri(filename), readonly: readonly)
+    public convenience init(_ filename: String, readonly: Bool = false, queue: DispatchQueue? = nil) throws {
+        try self.init(.uri(filename), readonly: readonly, queue: queue)
     }
 
     deinit {
@@ -410,8 +421,8 @@ public final class Connection {
     /// Sets a handler to call after encountering a busy signal (lock).
     ///
     /// - Parameter callback: This block is executed during a lock in which a
-    ///   busy error would otherwise be returned. It’s passed the number of
-    ///   times it’s been called for this lock. If it returns `true`, it will
+    ///   busy error would otherwise be returned. It's passed the number of
+    ///   times it's been called for this lock. If it returns `true`, it will
     ///   try again. If it returns `false`, no further attempts will be made.
     public func busyHandler(_ callback: ((_ tries: Int) -> Bool)?) {
         guard let callback else {
@@ -594,7 +605,7 @@ public final class Connection {
     ///     Default: `false`
     ///
     ///   - block: A block of code to run when the function is called. The block
-    ///     is called with an array of raw SQL values mapped to the function’s
+    ///     is called with an array of raw SQL values mapped to the function's
     ///     parameters and should return a raw SQL value (or nil).
     public func createFunction(_ functionName: String,
                                argumentCount: UInt? = nil,
@@ -703,11 +714,10 @@ public final class Connection {
         throw error
     }
 
-    fileprivate var queue = DispatchQueue(label: "SQLite.Database", attributes: [])
+    fileprivate let queue: DispatchQueue
+    fileprivate lazy var queueContext: Int = unsafeBitCast(self, to: Int.self)
 
     fileprivate static let queueKey = DispatchSpecificKey<Int>()
-
-    fileprivate lazy var queueContext: Int = unsafeBitCast(self, to: Int.self)
 
 }
 
